@@ -3,15 +3,13 @@ package com.psl.rockfield.challenge;
 import java.io.BufferedWriter;
 import java.io.IOException;
 import java.nio.file.*;
-import java.time.Duration;
-import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.stream.Stream;
 
 public class Runner {
 
-	private static final int NUMBER_OF_PARALLEL_THREADS = 16;
+	private static final int NUMBER_OF_PARALLEL_THREADS = 20;
 	private static final ExecutorService executor = Executors.newFixedThreadPool(NUMBER_OF_PARALLEL_THREADS);
 	private final List<Future<String>> threads = new LinkedList();
 
@@ -22,11 +20,11 @@ public class Runner {
 	 */
 	public void run() {
 		try {
-			Instant start = Instant.now();
+			Date start = new Date();
 			readFromEntryFile();
 			writeAnswerToFile();
-			Instant end = Instant.now();
-			System.out.println("Gone in " + Duration.between(start, end).getSeconds() + " seconds");
+			Date end = new Date();
+			System.out.println("Gone in " + (end.getTime() - start.getTime()) + " ms");
 		} finally {
 			executor.shutdownNow();
 		}
@@ -40,7 +38,9 @@ public class Runner {
 		String fileName = "entrada.txt";
 		try (Stream<String> stream = Files.lines(Paths.get(fileName))) {
 			stream.forEach(line -> {
-				threads.add(executor.submit(new Solver(line)));
+				if (!line.isEmpty()) {
+					threads.add(executor.submit(new Solver(line)));
+				}
 			});
 		} catch (IOException e) {
 			System.out.println("Unexpected error reading entrada.txt");
@@ -49,19 +49,30 @@ public class Runner {
 	}
 
 	/**
-	 * Escritura del archivo "salida.txt" línea por línea. Complejidad O(N),
-	 * donde N es el número total de líneas a escribir en el archivo.
+	 * Complejidad O(N), donde N es el número total de líneas a escribir en el
+	 * buffer.
 	 */
 	private void writeAnswerToFile() {
-		Path path = Paths.get("salida.txt");
-		try (BufferedWriter writer = Files.newBufferedWriter(path)) {
+		try {
 			int counter = 1;
+			StringBuilder buffer = new StringBuilder();
 			for (Future<String> future : threads) {
-				writer.write("Caso " + counter + ": " + future.get() + "\n");
+				buffer.append("Caso ").append(counter).append(": ").append(future.get()).append("\n");
 			}
+			flushBufferToHardDisk(buffer);
 		} catch (InterruptedException | ExecutionException e) {
 			System.out.println("Unexpected error solving the problems in parallel");
 			System.err.println(e);
+		}
+	}
+
+	/**
+	 * Escritura del archivo "salida.txt".
+	 */
+	private void flushBufferToHardDisk(StringBuilder buffer) {
+		Path path = Paths.get("salida.txt");
+		try (BufferedWriter writer = Files.newBufferedWriter(path)) {
+			writer.write(buffer.toString());
 		} catch (IOException e) {
 			System.out.println("Unexpected error writing salida.txt");
 			System.err.println(e);
